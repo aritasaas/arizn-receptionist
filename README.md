@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS clients (
   alert_email text,
   calendly_url text,
   access_token text,
+  token_expires_at timestamptz,
+  instagram_connected_at timestamptz,
+  instagram_connection_status text DEFAULT 'inactive',
+  instagram_username text,
   active boolean DEFAULT true,
   created_at timestamptz DEFAULT now()
 );
