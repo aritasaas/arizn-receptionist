@@ -49,7 +49,6 @@ function supabaseDiagnostic(err) {
       hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
       hasSupabaseKey: Boolean(process.env.SUPABASE_KEY),
       hasSupabaseServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-      hasSupabaseSecretKey: Boolean(process.env.SUPABASE_SECRET_KEY),
     },
   };
 }
