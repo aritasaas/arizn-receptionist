@@ -108,6 +108,8 @@ VALUES (
 
 Copy `.env.example` to `.env.local` and set the same vars on Vercel. See the file for the full annotated list.
 
+Set `SUPABASE_SERVICE_ROLE_KEY` only in server environments (Vercel env vars or local `.env.local`). It is used by trusted API routes for RLS-protected writes such as Instagram OAuth connection persistence and must never be exposed as a `NEXT_PUBLIC_*` variable.
+
 ### 4. Meta App
 
 - Webhook URL: `https://<deploy>/api/webhook`, verify token = `META_WEBHOOK_VERIFY_TOKEN`, subscribe to `messages` + `message_echoes` (echoes power human takeover).

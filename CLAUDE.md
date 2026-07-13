@@ -45,7 +45,7 @@ SQL completo: comentário no topo de `lib/supabase.js` e README.
 
 ## Env vars
 
-Obrigatórias: `GROQ_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`, `META_WEBHOOK_VERIFY_TOKEN`, `META_APP_SECRET`, `META_ACCESS_TOKEN`, `RESEND_API_KEY`.
+Obrigatórias: `GROQ_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `META_WEBHOOK_VERIFY_TOKEN`, `META_APP_SECRET`, `META_ACCESS_TOKEN`, `RESEND_API_KEY`.
 Recomendadas: `ALERT_EMAIL` (default `pedro@arizn.co`), `RESEND_FROM`, `CRON_SECRET`.
 Opcionais: `LOG_VERBOSE`, `REPLY_TEST_SECRET`, `BRAIN_API_URL`, `BRAIN_AUTH_TOKEN`, `GRAPH_API_VERSION`.
 Lista anotada em `.env.example`.
