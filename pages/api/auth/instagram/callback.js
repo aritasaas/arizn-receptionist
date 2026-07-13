@@ -36,6 +36,22 @@ function sanitizeServerError(err) {
   return err.code || err.status || err.name || 'unknown';
 }
 
+function supabaseDiagnostic(err) {
+  return {
+    operation: err.operation ?? null,
+    supabase: err.supabase ?? {
+      code: null,
+      message: err.message ?? null,
+      details: null,
+      hint: null,
+    },
+    env: {
+      hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+      hasSupabaseKey: Boolean(process.env.SUPABASE_KEY),
+    },
+  };
+}
+
 async function exchangeCodeForShortLivedToken(code, { clientId, clientSecret, redirectUri }) {
   const body = new URLSearchParams({
     client_id: clientId,
@@ -138,6 +154,7 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('[Instagram OAuth] Supabase save failed:', sanitizeServerError(err));
+    console.error('[Instagram OAuth] Supabase diagnostic:', JSON.stringify(supabaseDiagnostic(err)));
     return redirectWithError(res, 'supabase_failed');
   }
 
