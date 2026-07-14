@@ -2,6 +2,8 @@
 
 AI receptionist that answers Instagram DMs 24/7 for local businesses: replies with Groq (Llama), qualifies leads, detects buying intent, alerts the owner by email, shares a Calendly link when the customer wants to book, and pauses itself when a human takes over the conversation. Multi-tenant: one deploy serves all clients.
 
+It also supports Instagram comment keyword automation for Meta App Review: when someone comments configured keywords such as `PRICE`, `INFO`, or `BOOK` on a connected Instagram professional account's post, Meta sends a comment webhook and ARIZN sends that commenter one private DM reply.
+
 > **⚠️ Repo location:** this repo currently lives at `aritasaas/arizn-receptionist` and must be moved to the **`ARIZN-CO`** GitHub org (`ARIZN-CO/arizn-receptionist`) to follow ARIZN's standard. Use GitHub's "Transfer ownership" (Settings → Danger Zone) and re-link the Vercel project afterwards.
 
 ## Stack
@@ -18,6 +20,17 @@ Next.js (pages router) · Groq `llama-3.1-8b-instant` · Supabase · Resend · M
 6. Reply is sent via Graph API and stored with its `mid`
 7. Hot lead (AI flag, or client keywords, or booking intent) → lead marked `hot` + Resend email + Brain `lead.hot`
 8. If the owner replies manually (echo event with an unknown `mid`), the AI pauses for that conversation for 2 hours
+
+### Comment-to-DM flow
+
+1. Instagram user comments `PRICE`, `INFO`, `BOOK`, or a client-configured keyword on the business's Instagram media
+2. Meta calls `POST /api/webhook` with a `comments` webhook change
+3. Webhook routes by `entry.id` → matching active row in `clients`
+4. `lib/comments.js` matches the comment text against `clients.comment_dm_keywords` or `COMMENT_DM_KEYWORDS`
+5. The comment event is stored in `conversations` with `mid = comment:<comment_id>` before any DM is sent
+6. The unique `conversations_mid_key` index prevents duplicate private replies on webhook redelivery
+7. ARIZN sends a private reply through `POST /<IG_ACCOUNT_ID>/messages` with `recipient.comment_id`
+8. The private reply event is stored in `conversations` with `mid = comment_reply:<message_id>`
 
 ## Setup
 
@@ -36,6 +49,8 @@ CREATE TABLE IF NOT EXISTS clients (
   tone_of_voice text,
   system_prompt text,
   hot_lead_keywords text[],
+  comment_dm_keywords text[] DEFAULT ARRAY['PRICE','INFO','BOOK'],
+  comment_dm_reply text,
   alert_email text,
   calendly_url text,
   access_token text,
@@ -102,6 +117,8 @@ VALUES (
 
 - `system_prompt`: leave NULL to auto-generate from the fields above; set to fully override.
 - `hot_lead_keywords`: leave NULL/empty to use AI-based hot lead detection (recommended — works in any language); set an array to force word-boundary keyword matching.
+- `comment_dm_keywords`: comment keywords that trigger an automatic private reply. Defaults to `PRICE`, `INFO`, and `BOOK` when unset.
+- `comment_dm_reply`: optional private reply template. Supports `{{business_name}}` and `{{keyword}}`. If NULL, the app uses `COMMENT_DM_REPLY_MESSAGE` or a built-in safe default.
 - `access_token`: per-client IG long-lived token; NULL falls back to the shared default (`config.default_access_token` → `META_ACCESS_TOKEN`).
 
 ### 3. Environment variables
@@ -112,8 +129,26 @@ Set `SUPABASE_SERVICE_ROLE_KEY` only in server environments (Vercel env vars or 
 
 ### 4. Meta App
 
-- Webhook URL: `https://<deploy>/api/webhook`, verify token = `META_WEBHOOK_VERIFY_TOKEN`, subscribe to `messages` + `message_echoes` (echoes power human takeover).
-- **App Review**: `instagram_manage_messages` needs Advanced Access before the bot can answer the general public (without it, only app testers).
+- Webhook URL: `https://<deploy>/api/webhook`, verify token = `META_WEBHOOK_VERIFY_TOKEN`, subscribe to `messages`, `message_echoes`, and `comments`. Echoes power human takeover; comments power comment-to-DM automation.
+- **App Review**: request Advanced Access for `instagram_business_manage_messages` and `instagram_business_manage_comments` before the bot can answer the general public (without approval, only app testers/test accounts work).
+
+### Optional comment automation migration
+
+The code works with safe defaults even before these columns exist. Run this migration to configure keywords and reply copy per client:
+
+```sql
+ALTER TABLE clients
+  ADD COLUMN IF NOT EXISTS comment_dm_keywords text[] DEFAULT ARRAY['PRICE','INFO','BOOK'],
+  ADD COLUMN IF NOT EXISTS comment_dm_reply text;
+
+UPDATE clients
+SET
+  comment_dm_keywords = COALESCE(comment_dm_keywords, ARRAY['PRICE','INFO','BOOK']),
+  comment_dm_reply = COALESCE(
+    comment_dm_reply,
+    'Thanks for commenting! We just sent you a DM with more info.'
+  );
+```
 
 ### 5. Crons (configured in `vercel.json`)
 

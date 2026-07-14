@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { processMessage } = require('../../lib/reply');
+const { processCommentChange } = require('../../lib/comments');
 const { getClientByPageId } = require('../../lib/supabase');
 const { vlog } = require('../../lib/log');
 
@@ -78,13 +79,6 @@ export default async function handler(req, res) {
 
       vlog('[Webhook] Entry:', pageId, 'messaging:', messagingEvents.length, 'changes:', changes.length);
 
-      if (messagingEvents.length === 0) {
-        for (const change of changes) {
-          vlog('[Webhook] Change field:', change.field, JSON.stringify(change.value));
-        }
-        continue;
-      }
-
       let client;
       try {
         client = await getClientByPageId(pageId);
@@ -95,6 +89,13 @@ export default async function handler(req, res) {
       if (!client) {
         console.warn(`[Webhook] No active client for page ${pageId} — skipping. Add a row to the clients table.`);
         continue;
+      }
+
+      for (const change of changes) {
+        vlog('[Webhook] Change field:', change.field, JSON.stringify(change.value));
+        if (change.field === 'comments' || change.field === 'live_comments') {
+          jobs.push(processCommentChange(change, client, pageId));
+        }
       }
 
       for (const event of messagingEvents) {
@@ -110,7 +111,12 @@ export default async function handler(req, res) {
     // processMessage handles its own errors, so a failure here never
     // causes Meta to retry the whole batch.
     if (jobs.length > 0) {
-      await Promise.allSettled(jobs);
+      const results = await Promise.allSettled(jobs);
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          console.error('[Webhook] Async job failed:', result.reason?.message ?? result.reason);
+        }
+      }
     }
 
     return res.status(200).end();
