@@ -2,3 +2,8 @@
 node_modules/
 .next/
 .vercel
+
+# Env — adicionado pelo Security Scan (não commitar credenciais)
+.env
+.env.*
+!.env.example
