@@ -10,6 +10,11 @@ on:
     - cron: "0 12 * * 1"
   workflow_dispatch: {}
 
+env:
+  # Versão do gitleaks. Para atualizar, troque aqui e confira o nome do asset em
+  # https://github.com/gitleaks/gitleaks/releases
+  GITLEAKS_VERSION: "8.30.1"
+
 jobs:
   secret-scan:
     name: Escanear segredos expostos
@@ -22,13 +27,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Rodar Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Por padrão, o Gitleaks Action já falha o job (exit 1) se encontrar
-        # um segredo — isso bloqueia o PR de ser mergeado e aparece como
-        # "failing check" na aba Actions do repositório.
+      # Usamos o binário do gitleaks (MIT, gratuito) em vez da
+      # gitleaks/gitleaks-action@v2 — aquela Action exige licença paga
+      # (GITLEAKS_LICENSE) em repositórios pertencentes a uma organização,
+      # e falha o job com "missing gitleaks license" sem escanear nada.
+      - name: Instalar gitleaks
+        run: |
+          set -euo pipefail
+          URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL "$URL" | tar -xz -C "$RUNNER_TEMP" gitleaks
+          chmod +x "$RUNNER_TEMP/gitleaks"
+          "$RUNNER_TEMP/gitleaks" version
+
+      - name: Rodar Gitleaks (histórico completo)
+        run: |
+          # `gitleaks git` varre todos os commits alcançáveis, não só o working
+          # tree — uma chave removida no último commit ainda existe no histórico.
+          # --redact impede que o valor do segredo apareça no log público do run.
+          # Sai com código 1 se achar algo, o que falha o job e bloqueia o PR.
+          "$RUNNER_TEMP/gitleaks" git . --redact --verbose
 
   gitignore-check:
     name: Confirmar .gitignore cobre .env
