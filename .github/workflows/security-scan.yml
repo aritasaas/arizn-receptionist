@@ -1,0 +1,82 @@
+name: Security Scan
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  schedule:
+    # Roda toda segunda-feira às 9h (horário de Brasília = 12h UTC)
+    - cron: "0 12 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  secret-scan:
+    name: Escanear segredos expostos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout completo (histórico incluso)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rodar Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Por padrão, o Gitleaks Action já falha o job (exit 1) se encontrar
+        # um segredo — isso bloqueia o PR de ser mergeado e aparece como
+        # "failing check" na aba Actions do repositório.
+
+  gitignore-check:
+    name: Confirmar .gitignore cobre .env
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verificar .gitignore
+        run: |
+          if [ ! -f .gitignore ]; then
+            echo "::error::Este repositório não tem .gitignore. Crie um cobrindo .env, .env.local, .env.*.local"
+            exit 1
+          fi
+
+          # Testa o COMPORTAMENTO real do gitignore, não a presença literal da
+          # string. Um .gitignore com `.env*` cobre `.env.local` corretamente —
+          # um grep literal por ".env.local" daria falso negativo nesse caso.
+          MISSING=""
+          for f in .env .env.local .env.production.local; do
+            if ! git check-ignore -q "$f"; then
+              MISSING="$MISSING $f"
+            fi
+          done
+
+          if [ -n "$MISSING" ]; then
+            echo "::error::.gitignore não cobre:$MISSING — adicione antes de commitar qualquer .env"
+            exit 1
+          fi
+
+          echo "✅ .gitignore cobre os padrões essenciais de env."
+
+  no-exposed-data-files:
+    name: Checar arquivos de dados servidos publicamente
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Procurar JSON/config com aparência de dump de dados na raiz pública
+        run: |
+          # Sinaliza arquivos comuns que costumam ser servidos por engano
+          # (ex: o padrão que causou o incidente do arizn-crm-data.json)
+          SUSPECT=$(find . -maxdepth 3 \
+            \( -iname "*-data.json" -o -iname "*credentials*.json" -o -iname "*secrets*.json" \) \
+            -not -path "*/node_modules/*" -not -path "*/.git/*" 2>/dev/null || true)
+
+          if [ -n "$SUSPECT" ]; then
+            echo "::warning::Arquivos com nome suspeito de dump de dados encontrados — confirme que NÃO estão numa rota pública servida pelo app:"
+            echo "$SUSPECT"
+          else
+            echo "✅ Nenhum arquivo com padrão de nome suspeito encontrado."
+          fi
